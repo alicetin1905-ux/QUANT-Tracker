@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1A2340"/>
+      <stop offset="1" stop-color="#0A0E16"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- faint ledger grid -->
+  <g stroke="#2A3550" stroke-width="3">
+    <line x1="96" x2="416" y1="176" y2="176"/>
+    <line x1="96" x2="416" y1="256" y2="256"/>
+    <line x1="96" x2="416" y1="336" y2="336"/>
+  </g>
+  <!-- three candles, rising -->
+  <g stroke-linecap="round">
+    <line x1="160" x2="160" y1="268" y2="356" stroke="#8C9AFF" stroke-width="8"/>
+    <rect x="140" y="288" width="40" height="52" rx="6" fill="#8C9AFF"/>
+    <line x1="256" x2="256" y1="206" y2="318" stroke="#8C9AFF" stroke-width="8"/>
+    <rect x="236" y="226" width="40" height="74" rx="6" fill="#8C9AFF"/>
+    <line x1="352" x2="352" y1="112" y2="300" stroke="#3CC48F" stroke-width="8"/>
+    <rect x="332" y="136" width="40" height="140" rx="6" fill="#3CC48F"/>
+  </g>
+  <text x="256" y="420" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="64" letter-spacing="10" fill="#E8ECF4">QNT</text>
+</svg>
