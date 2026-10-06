@@ -1,6 +1,6 @@
 // Service worker: keeps the app shell available offline.
 // Price data is never cached here; the page stores its own last prices.
-const CACHE = 'qnt-shell-v1';
+const CACHE = 'qnt-shell-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png', 'icons/icon.svg'

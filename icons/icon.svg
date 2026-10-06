@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Quant (QNT) logo mark, white on the app's navy. Logo is a trademark of Quant Network. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1A2340"/>
@@ -6,20 +7,12 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <!-- faint ledger grid -->
-  <g stroke="#2A3550" stroke-width="3">
-    <line x1="96" x2="416" y1="176" y2="176"/>
-    <line x1="96" x2="416" y1="256" y2="256"/>
-    <line x1="96" x2="416" y1="336" y2="336"/>
+  <g transform="translate(122.07 111.00) scale(0.59353)" fill="#FFFFFF">
+    <path d="M102.3,29l124.1,145.4l83.3-49c0,0-100.5-134.4-127.3-124.9C157.2,10.1,102.3,29,102.3,29z"/>
+    <path d="M312.8,125.4c0,0,18.9-33.2,28.3-77.5c0,0,94.3,37.9,58.1,132.8L312.8,125.4z"/>
+    <path d="M399.2,180.8l7.9,99.6l36.1-4.7c0,0,9.4-3.2,7.9-20.5c-1.6-19-4.7-58.5-4.7-58.5s1.6-9.5-20.4-12.6 C399.2,179.2,399.2,180.8,399.2,180.8z"/>
+    <path d="M407,280.4l-72.3,58.5l33,64.8c0,0,7.9,25.3,31.4-3.2c22-28.5,31.4-33.2,29.8-50.6C427.5,332.5,422.7,291.4,407,280.4z"/>
+    <path d="M333.2,338.8l-99-44.3L147.8,470c0,0-6.3,12.6,15.7,14.2c22,3.2,58.1,11.1,77-7.9C259.4,459,333.2,338.8,333.2,338.8z"/>
+    <path d="M234.2,293l-9.4-117L11.1,190.3c0,0-12.6,1.6-11,25.3C1.7,247.2,4.8,282,4.8,282s-1.6,14.2,26.7,15.8 C59.8,299.3,231.1,299.3,234.2,293z"/>
   </g>
-  <!-- three candles, rising -->
-  <g stroke-linecap="round">
-    <line x1="160" x2="160" y1="268" y2="356" stroke="#8C9AFF" stroke-width="8"/>
-    <rect x="140" y="288" width="40" height="52" rx="6" fill="#8C9AFF"/>
-    <line x1="256" x2="256" y1="206" y2="318" stroke="#8C9AFF" stroke-width="8"/>
-    <rect x="236" y="226" width="40" height="74" rx="6" fill="#8C9AFF"/>
-    <line x1="352" x2="352" y1="112" y2="300" stroke="#3CC48F" stroke-width="8"/>
-    <rect x="332" y="136" width="40" height="140" rx="6" fill="#3CC48F"/>
-  </g>
-  <text x="256" y="420" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="64" letter-spacing="10" fill="#E8ECF4">QNT</text>
 </svg>
