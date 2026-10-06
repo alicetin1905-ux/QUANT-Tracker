@@ -1,0 +1,7 @@
+{
+  "_help": "Your own price levels. You get one alert each time the price crosses a level. Example: \"above_eur\": [300, 350]",
+  "above_usd": [],
+  "below_usd": [],
+  "above_eur": [],
+  "below_eur": []
+}
