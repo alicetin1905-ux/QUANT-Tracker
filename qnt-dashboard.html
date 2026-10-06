@@ -1,0 +1,762 @@
+<title>QNT Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: settlement-terminal grid. Identity + price band, chart beside key stats,
+   then order book / tape / technicals, then catalysts beside fundamentals. */
+:root{
+  --bg:#EEF1F6; --surface:#FFFFFF; --sunk:#F5F7FA; --ink:#0F1626; --ink-2:#38425A; --muted:#667089; --line:#D9DEE8;
+  --accent:#2B44E0; --accent-soft:#E3E7FD;
+  --up:#0B8558; --up-soft:#DCF2E8; --down:#C2362C; --down-soft:#FBE4E1; --warn:#A35F00; --warn-soft:#FBEFD9;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0A0E16; --surface:#111827; --sunk:#0D1320; --ink:#E8ECF4; --ink-2:#BAC3D3; --muted:#8790A5; --line:#232C3D;
+  --accent:#8C9AFF; --accent-soft:#1E2452;
+  --up:#3CC48F; --up-soft:#0F2A21; --down:#FF7668; --down-soft:#341917; --warn:#F0A93B; --warn-soft:#2F2310;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0A0E16; --surface:#111827; --sunk:#0D1320; --ink:#E8ECF4; --ink-2:#BAC3D3; --muted:#8790A5; --line:#232C3D;
+  --accent:#8C9AFF; --accent-soft:#1E2452;
+  --up:#3CC48F; --up-soft:#0F2A21; --down:#FF7668; --down-soft:#341917; --warn:#F0A93B; --warn-soft:#2F2310;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:20px 56px;display:flex;flex-direction:column;gap:16px}
+@media (min-width:720px){.wrap{padding-inline:24px}}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 24px}
+.ident{display:flex;align-items:center;gap:14px}
+.glyph{width:46px;height:46px;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--f-mono);font-weight:500;font-size:13px;letter-spacing:.04em;border-radius:3px}
+.ident h1{margin:0;font-family:var(--f-display);font-weight:800;font-stretch:112%;font-size:26px;line-height:1.05;letter-spacing:-.01em}
+.ident p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.status{display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:420px;min-width:0}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.live{background:var(--up-soft);border-color:transparent;color:var(--ink)}
+.pill.live .dot{background:var(--up);box-shadow:0 0 0 3px color-mix(in srgb,var(--up) 25%,transparent)}
+.pill.warn{background:var(--warn-soft);border-color:transparent;color:var(--ink)}
+.pill.warn .dot{background:var(--warn)}
+.status small{color:var(--muted);font-size:12px;text-align:right}
+
+.priceband{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:12px 40px;align-items:end;padding-block:4px 6px;border-bottom:1px solid var(--line);padding-bottom:18px}
+@media (max-width:820px){.priceband{grid-template-columns:minmax(0,1fr)}}
+.price-wrap{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 16px}
+.price{font-family:var(--f-display);font-weight:800;font-stretch:108%;font-size:clamp(44px,8vw,76px);line-height:.95;letter-spacing:-.02em;font-variant-numeric:tabular-nums;border-radius:6px;padding-inline:2px;transition:background-color .9s}
+.price.flash-up{background:var(--up-soft);transition:none}
+.price.flash-down{background:var(--down-soft);transition:none}
+.pair{color:var(--muted);font-family:var(--f-mono);font-size:12px;letter-spacing:.04em}
+.chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--f-mono);font-weight:500;font-size:14px;padding:3px 9px;border-radius:5px;font-variant-numeric:tabular-nums}
+.chip.up{background:var(--up-soft);color:var(--up)}
+.chip.down{background:var(--down-soft);color:var(--down)}
+.chip.flat{background:var(--sunk);color:var(--ink-2)}
+.quotes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 20px}
+@media (max-width:560px){.quotes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.q dt{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.q dd{margin:0;font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums}
+.q dd small{color:var(--muted);font-size:11px}
+.range{grid-column:1/-1}
+.rangebar{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--down-soft),var(--sunk) 50%,var(--up-soft));border:1px solid var(--line);margin-top:6px}
+.rangebar i{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:var(--ink);border:2px solid var(--surface);transform:translate(-50%,-50%)}
+.rangeends{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:4px}
+
+/* ---------- panels & grids ---------- */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-width:0}
+.ph{display:flex;align-items:baseline;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:12px}
+.ph h2{margin:0;font-family:var(--f-display);font-weight:700;font-stretch:100%;font-size:15px;letter-spacing:.01em;text-wrap:balance}
+.meta{font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
+.meta.live{color:var(--up)}
+.meta.stale{color:var(--warn)}
+.g-top{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px}
+.g-mid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.g-bot{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+@media (max-width:980px){.g-top{grid-template-columns:minmax(0,1fr)}.g-mid{grid-template-columns:repeat(2,minmax(0,1fr))}.g-bot{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:680px){.g-mid{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- chart ---------- */
+.tabs{display:inline-flex;background:var(--sunk);border:1px solid var(--line);border-radius:7px;padding:2px;gap:2px}
+.tabs button{font:600 12px/1 var(--f-mono);color:var(--ink-2);background:transparent;border:0;padding:6px 10px;border-radius:5px;cursor:pointer}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+#chartWrap{position:relative;touch-action:pan-y;outline:none}
+#chartWrap svg{display:block;max-width:100%;height:auto;overflow:visible}
+.grid{stroke:var(--line);stroke-width:1}
+.ax{fill:var(--muted);font:11px var(--f-mono)}
+.wick.up,.body.up{stroke:var(--up);fill:var(--up)}
+.wick.dn,.body.dn{stroke:var(--down);fill:var(--down)}
+.wick{stroke-width:1}
+.body{stroke-width:0}
+.vbar.up{fill:var(--up);opacity:.45}
+.vbar.dn{fill:var(--down);opacity:.45}
+.lastline{stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3}
+.lasttag{fill:var(--accent)}
+.lasttxt{fill:var(--surface);font:500 11px var(--f-mono)}
+.evline{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:2 3;opacity:.7}
+.evtxt{fill:var(--ink-2);font:600 10.5px var(--f-body)}
+.xh{stroke:var(--ink-2);stroke-width:1;opacity:0}
+.xh.on{opacity:.55}
+.tip{position:absolute;top:8px;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:12px/1.45 var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink);box-shadow:0 6px 18px rgba(10,14,22,.14);min-width:150px}
+.tip b{font-family:var(--f-body);font-weight:600;display:block;margin-bottom:3px}
+.tip .r{display:flex;justify-content:space-between;gap:14px}
+.tip .r span:first-child{color:var(--muted)}
+.chartfoot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:12px;color:var(--muted)}
+details.tbl summary{cursor:pointer;color:var(--ink-2);font-weight:500}
+.tblbox{overflow-x:auto;max-height:260px;overflow-y:auto;margin-top:8px;border:1px solid var(--line);border-radius:6px}
+.tblbox table{border-collapse:collapse;width:100%;font:12px var(--f-mono);font-variant-numeric:tabular-nums}
+.tblbox th,.tblbox td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.tblbox th:first-child,.tblbox td:first-child{text-align:left}
+.tblbox th{position:sticky;top:0;background:var(--sunk);font-family:var(--f-body);font-weight:600;color:var(--ink-2)}
+
+/* ---------- key stats ---------- */
+.stats{display:flex;flex-direction:column;gap:0;margin:0}
+.stat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-top:1px solid var(--line)}
+.stat:first-child{border-top:0;padding-top:0}
+.stat dt{color:var(--ink-2);font-size:13px}
+.stat dd{margin:0;font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums;text-align:right}
+.stat .sub{grid-column:1/-1;color:var(--muted);font-size:11.5px}
+.meter{grid-column:1/-1;position:relative;height:5px;border-radius:3px;background:var(--sunk);border:1px solid var(--line);margin-top:4px;overflow:hidden}
+.meter span{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:3px}
+
+/* ---------- performance ---------- */
+.perf{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+@media (max-width:860px){.perf{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:440px){.perf{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pt{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.pt span{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.pt strong{font-family:var(--f-mono);font-weight:500;font-size:18px;font-variant-numeric:tabular-nums}
+.pt strong.up{color:var(--up)} .pt strong.down{color:var(--down)}
+.pt small{color:var(--muted);font-size:11px}
+
+/* ---------- order book ---------- */
+.book{font:12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+.bh,.br{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:3px 6px;position:relative}
+.bh{color:var(--muted);font:600 11px var(--f-body);letter-spacing:.05em;text-transform:uppercase;padding-bottom:6px}
+.bh span:not(:first-child),.br span:not(:first-child){text-align:right}
+.br::before{content:"";position:absolute;inset:1px 0 1px auto;width:var(--w);border-radius:2px;opacity:.9}
+.br.ask::before{background:var(--down-soft)}
+.br.bid::before{background:var(--up-soft)}
+.br span{position:relative}
+.br.ask span:first-child{color:var(--down)}
+.br.bid span:first-child{color:var(--up)}
+.spread{display:flex;justify-content:space-between;gap:8px;padding:7px 6px;margin-block:3px;border-block:1px solid var(--line);font-size:12px;color:var(--ink-2)}
+.imb{margin-top:12px}
+.imb .lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);margin-bottom:5px}
+.imb .bar{display:flex;height:6px;border-radius:3px;overflow:hidden;gap:2px}
+.imb .bar i{display:block;height:100%}
+.imb .b{background:var(--up)} .imb .a{background:var(--down)}
+
+/* ---------- trades ---------- */
+.tape{list-style:none;margin:0;padding:0;font:12.5px var(--f-mono);font-variant-numeric:tabular-nums;max-height:372px;overflow-y:auto}
+.tape li{display:grid;grid-template-columns:auto 1fr 1fr auto;gap:10px;padding:4px 2px;border-bottom:1px solid var(--line);align-items:center}
+.tape li:last-child{border-bottom:0}
+.tape .t{color:var(--muted)}
+.tape .p,.tape .q{text-align:right}
+.side{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-body);font-size:12px;color:var(--ink-2)}
+.side i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.side.buy i{background:var(--up)} .side.sell i{background:var(--down)}
+.tapesum{font-size:12px;color:var(--ink-2);margin-bottom:8px}
+
+/* ---------- technicals ---------- */
+.tech{display:flex;flex-direction:column;gap:14px}
+.tk{display:flex;flex-direction:column;gap:5px}
+.tk .top-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.tk .name{color:var(--ink-2);font-size:13px}
+.tk .val{font:500 15px var(--f-mono);font-variant-numeric:tabular-nums}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;letter-spacing:.02em}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag.good{background:var(--up-soft);color:var(--up)}
+.tag.bad{background:var(--down-soft);color:var(--down)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.neutral{background:var(--sunk);color:var(--ink-2)}
+.rsi{position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--up-soft) 0 30%,var(--sunk) 30% 70%,var(--warn-soft) 70% 100%);border:1px solid var(--line)}
+.rsi i{position:absolute;top:50%;width:3px;height:14px;background:var(--ink);transform:translate(-50%,-50%);border-radius:1px}
+.rsiscale{display:flex;justify-content:space-between;font:10.5px var(--f-mono);color:var(--muted)}
+.tk small{color:var(--muted);font-size:11.5px}
+.note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;margin:0}
+
+/* ---------- catalysts ---------- */
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.tl li{display:grid;grid-template-columns:86px minmax(0,1fr);gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.tl li:first-child{border-top:0;padding-top:0}
+.tl time{font:500 12px var(--f-mono);color:var(--ink-2);padding-top:2px}
+.tl h3{margin:0 0 3px;font-size:14px;font-weight:600;line-height:1.35;text-wrap:balance}
+.tl p{margin:0;color:var(--ink-2);font-size:13px;max-width:68ch}
+.tl .src{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:6px;font-size:12px}
+.tl li.ahead time{color:var(--accent)}
+.conf{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 7px;border-radius:4px}
+.conf.ok{background:var(--accent-soft);color:var(--accent)}
+.conf.rep{background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
+.conf.next{background:var(--accent);color:var(--surface)}
+@media (max-width:480px){.tl li{grid-template-columns:minmax(0,1fr);gap:4px}}
+
+/* ---------- about ---------- */
+.about p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 14px;margin:12px 0 4px;font-size:13px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;color:var(--ink)}
+.about h3{font-family:var(--f-display);font-size:13px;font-weight:700;margin:16px 0 6px;letter-spacing:.01em}
+.about ul{margin:0;padding-left:18px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px;font-size:13px}
+
+footer{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:8px;padding-top:4px}
+footer ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:4px 16px}
+@media (prefers-reduced-motion: reduce){.price,.price.flash-up,.price.flash-down{transition:none;background:transparent}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="ident">
+      <div class="glyph" aria-hidden="true">QNT</div>
+      <div>
+        <h1>Quant</h1>
+        <p>Quant Network · Overledger interoperability token</p>
+      </div>
+    </div>
+    <div class="status" aria-live="polite">
+      <span class="pill" id="pill"><span class="dot"></span><span id="pillTxt">Snapshot</span></span>
+      <small id="statusNote">Saved prices from Crypto.com, 6 Oct 2026 11:47 UTC.</small>
+    </div>
+  </header>
+
+  <section class="priceband" aria-label="Current price">
+    <div>
+      <div class="pair">QNT / USD · CRYPTO.COM EXCHANGE</div>
+      <div class="price-wrap">
+        <div class="price" id="price">$254.58</div>
+        <span class="chip flat" id="chg">—</span>
+      </div>
+    </div>
+    <dl class="quotes" style="margin:0">
+      <div class="q"><dt>Best bid</dt><dd id="bid">—</dd></div>
+      <div class="q"><dt>Best ask</dt><dd id="ask">—</dd></div>
+      <div class="q"><dt>Spread</dt><dd id="spr">—</dd></div>
+      <div class="q"><dt>24h volume</dt><dd id="vol24">—</dd></div>
+      <div class="q range">
+        <dt>24h range</dt>
+        <div class="rangebar"><i id="rangeDot" style="left:50%"></i></div>
+        <div class="rangeends"><span id="lo">—</span><span id="hi">—</span></div>
+      </div>
+    </dl>
+  </section>
+
+  <section class="perf" aria-label="Price performance">
+    <div class="pt"><span>24 hours</span><strong id="p24">—</strong><small>Crypto.com ticker</small></div>
+    <div class="pt"><span>7 days</span><strong id="p7">—</strong><small>daily closes</small></div>
+    <div class="pt"><span>30 days</span><strong id="p30">—</strong><small>daily closes</small></div>
+    <div class="pt"><span>90 days</span><strong id="p90">—</strong><small>weekly closes</small></div>
+    <div class="pt"><span>Since TCH deal</span><strong id="pTch">—</strong><small>vs 23 Sep close</small></div>
+    <div class="pt"><span>1 year</span><strong class="up">+145.8%</strong><small>CoinGecko, 6 Oct</small></div>
+  </section>
+
+  <div class="g-top">
+    <section class="panel" aria-labelledby="chartH">
+      <div class="ph">
+        <h2 id="chartH">Price &amp; volume</h2>
+        <div class="tabs" role="group" aria-label="Candle interval">
+          <button type="button" id="tf-1h" data-tf="1h" aria-pressed="false">1H</button>
+          <button type="button" id="tf-4h" data-tf="4h" aria-pressed="false">4H</button>
+          <button type="button" id="tf-1D" data-tf="1D" aria-pressed="true">1D</button>
+          <button type="button" id="tf-7D" data-tf="7D" aria-pressed="false">1W</button>
+        </div>
+      </div>
+      <div id="chartWrap" tabindex="0" aria-label="Candlestick chart. Use left and right arrow keys to read candles.">
+        <div id="chart"></div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <div class="chartfoot">
+        <span id="chartMeta" class="meta">—</span>
+        <details class="tbl"><summary>Show data table</summary><div class="tblbox" id="tbl"></div></details>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="statsH">
+      <div class="ph"><h2 id="statsH">Market snapshot</h2><span class="meta" id="statsMeta">price-linked values update live</span></div>
+      <dl class="stats">
+        <div class="stat"><dt>Market cap (est.)</dt><dd id="mcap">—</dd><span class="sub">Price × 14.54M circulating. Rank #33 on CoinGecko, 6 Oct.</span></div>
+        <div class="stat"><dt>Fully diluted value</dt><dd id="fdv">—</dd><span class="sub">Price × 14,612,493 max supply</span></div>
+        <div class="stat"><dt>24h volume, all markets</dt><dd>$223.0M</dd><span class="sub">CoinGecko, 6 Oct. Binance QNT/USDT leads with ~$47M.</span></div>
+        <div class="stat"><dt>Circulating supply</dt><dd>14.54M QNT</dd><div class="meter"><span style="width:99.5%"></span></div><span class="sub">99.5% of a fixed 14,612,493 cap. No new issuance.</span></div>
+        <div class="stat"><dt>All-time high</dt><dd>$427.42</dd><div class="meter"><span id="athBar" style="width:60%"></span></div><span class="sub" id="athSub">11 Sep 2021</span></div>
+        <div class="stat"><dt>All-time low</dt><dd>$0.2158</dd><span class="sub">23 Aug 2018</span></div>
+        <div class="stat"><dt>Rally high (this cycle)</dt><dd id="rallyHi">—</dd><span class="sub" id="rallySub">—</span></div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="g-mid">
+    <section class="panel" aria-labelledby="bookH">
+      <div class="ph"><h2 id="bookH">Order book</h2><span class="meta" id="bookMeta">—</span></div>
+      <div class="book" id="book"></div>
+      <div class="imb" id="imb"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="tapeH">
+      <div class="ph"><h2 id="tapeH">Recent trades</h2><span class="meta" id="tapeMeta">—</span></div>
+      <div class="tapesum" id="tapeSum"></div>
+      <ul class="tape" id="tape"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="techH">
+      <div class="ph"><h2 id="techH">Technicals (daily)</h2><span class="meta">computed from candles</span></div>
+      <div class="tech" id="tech"></div>
+    </section>
+  </div>
+
+  <div class="g-bot">
+    <section class="panel" aria-labelledby="catH">
+      <div class="ph"><h2 id="catH">What's moving QNT</h2><span class="meta">news through 6 Oct 2026</span></div>
+      <ol class="tl">
+        <li class="ahead">
+          <time datetime="2027">H1 2027</time>
+          <div><h3>US tokenized-deposit network goes live</h3>
+          <p>The Clearing House plans to launch its On-Chain Money network, built on Quant's Overledger, in the first half of 2027.</p>
+          <div class="src"><span class="conf next">Upcoming</span><a href="https://genfinity.io/2026/09/29/quant-network-overledger-clearing-house-tokenized-deposits-explained/">Genfinity</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-10-05">5 Oct</time>
+          <div><h3>ECB digital euro trials reportedly name Quant</h3>
+          <p>Quant is said to be part of an expanded digital euro pilot for conditional payments, with a 12-month trial starting late 2027. We could not find a primary ECB source.</p>
+          <div class="src"><span class="conf rep">Reported</span><a href="https://coinmarketcap.com/cmc-ai/quant/latest-updates/">CoinMarketCap</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-10-01">1 Oct</time>
+          <div><h3>OKX lists QNT perpetual futures, up to 50x</h3>
+          <p>Leverage arrived at the top of the rally. QNT pulled back about 16% the same day as the parabolic move cooled.</p>
+          <div class="src"><span class="conf rep">Reported</span><a href="https://coinmarketcap.com/cmc-ai/quant/latest-updates/">CoinMarketCap</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-10-01">1 Oct</time>
+          <div><h3>QNT tradable on Solana via Sunrise</h3>
+          <p>A bridged QNT token launched for spot trading on Raydium, Solana's main DEX.</p>
+          <div class="src"><span class="conf rep">Reported</span><a href="https://coinmarketcap.com/cmc-ai/quant/latest-updates/">CoinMarketCap</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-09-27">27 Sep</time>
+          <div><h3>The breakout day: $152 to $287</h3>
+          <p>QNT nearly doubled in one session on Crypto.com, wicking as high as $368 on $11.5M of volume, about 140 times a normal August day there.</p>
+          <div class="src"><span class="conf ok">Market data</span><span class="meta">Crypto.com candles</span></div></div>
+        </li>
+        <li>
+          <time datetime="2026-09-24">24 Sep</time>
+          <div><h3>The Clearing House picks Quant for US tokenized deposits</h3>
+          <p>The operator of the RTP and CHIPS payment rails, which clear over $2 trillion a day, chose Quant as the interoperability and transaction layer for its On-Chain Money Initiative, backed by 25 US banks.</p>
+          <div class="src"><span class="conf ok">Confirmed</span><a href="https://genfinity.io/2026/09/29/quant-network-overledger-clearing-house-tokenized-deposits-explained/">Genfinity</a><a href="https://coinmarketcap.com/top-stories/6ac43b8d55522f03de706d7d/">CoinMarketCap</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-09-24">24 Sep</time>
+          <div><h3>UK tokenised sterling deposits running live</h3>
+          <p>Barclays, HSBC UK, Lloyds, NatWest, Nationwide, Santander and Monzo are transacting on the Great British Tokenised Deposits platform, led by UK Finance with Quant as technology provider.</p>
+          <div class="src"><span class="conf ok">Confirmed</span><a href="https://cointelegraph.com/news/uk-finance-tokenized-sterling-deposits-barclays-hsbc-quant">Cointelegraph</a></div></div>
+        </li>
+        <li>
+          <time datetime="2026-09">Sep</time>
+          <div><h3>"Above the Ledger" whitepaper</h3>
+          <p>Quant set out its plan for programmable tokenized instruments and automated settlement across ledgers.</p>
+          <div class="src"><span class="conf rep">Reported</span><a href="https://coinmarketcap.com/cmc-ai/quant/latest-updates/">CoinMarketCap</a></div></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="panel about" aria-labelledby="aboutH">
+      <div class="ph"><h2 id="aboutH">About Quant</h2></div>
+      <p>Quant builds Overledger, software that lets banks and enterprises connect different blockchains and existing payment systems without picking one network. Its customers are regulated institutions, and its recent wins are in tokenized bank money.</p>
+      <p>QNT is the utility token: organizations pay for Overledger licences and network access in QNT. Supply is fixed at 14,612,493 tokens.</p>
+      <dl class="facts">
+        <dt>Founded</dt><dd>2015, London, by Gilbert Verdian (ex-Mastercard security lead, initiated ISO/TC 307 for blockchain standards)</dd>
+        <dt>Token</dt><dd>ERC-20 on Ethereum; bridged version on Solana since Oct 2026</dd>
+        <dt>Product</dt><dd>Overledger; Overledger Fusion (Jun 2025), a "Layer 2.5" multi-ledger rollup for cross-chain stablecoins and tokenized assets</dd>
+        <dt>Tick size</dt><dd class="mono">0.001 USD · 0.001 QNT on Crypto.com</dd>
+      </dl>
+      <h3>Track record</h3>
+      <ul>
+        <li>Project Rosalind (2023) with the BIS Innovation Hub and Bank of England, on APIs for retail CBDC</li>
+        <li>LACChain with the Inter-American Development Bank and Oracle, across 12 Latin American countries</li>
+        <li>Certified interoperability solution for Oracle Blockchain Platform</li>
+        <li>UK Finance GBTD tokenised deposits (live) and The Clearing House On-Chain Money (2027)</li>
+      </ul>
+      <h3>Risks to watch</h3>
+      <ul>
+        <li>Price rose about 4x in a week on one announcement. Moves of 20% in a day have been common since.</li>
+        <li>Bank revenue does not have to flow through the token. How much demand the TCH deal creates for QNT is unclear.</li>
+        <li>New 50x perpetual futures add leverage that can cause sharp liquidation moves either way.</li>
+        <li>Crypto.com's QNT/USD book is thin (about $1M a day). Binance and other venues set the price.</li>
+      </ul>
+    </section>
+  </div>
+
+  <footer>
+    <span>Not financial advice. Market data from the Crypto.com Exchange; supply, market cap rank and all-time figures from CoinGecko on 6 Oct 2026.</span>
+    <ul>
+      <li><a href="https://www.coingecko.com/en/coins/quant-network">CoinGecko</a></li>
+      <li><a href="https://crypto.com/exchange/trade/QNT_USD">Crypto.com Exchange</a></li>
+      <li><a href="https://genfinity.io/2026/09/29/quant-network-overledger-clearing-house-tokenized-deposits-explained/">Genfinity: TCH explainer</a></li>
+      <li><a href="https://cointelegraph.com/news/uk-finance-tokenized-sterling-deposits-barclays-hsbc-quant">Cointelegraph: UK tokenised deposits</a></li>
+      <li><a href="https://coinmarketcap.com/cmc-ai/quant/latest-updates/">CoinMarketCap: latest updates</a></li>
+      <li><a href="https://en.cryptonomist.ch/2026/10/01/quant-qnt-crypto-analysis-rsi/">Cryptonomist: 1 Oct analysis</a></li>
+      <li><a href="https://quant.network">quant.network</a></li>
+    </ul>
+  </footer>
+</div>
+
+<script type="application/json" id="snap">
+{"asOf":"2026-10-06T11:47:40Z",
+"ticker":{"best_ask":"254.432","best_bid":"254.379","change":"0.0051","high":"269.194","instrument_name":"QNT_USD","last":"254.579","low":"250.715","timestamp":"2026-10-06T11:47:32.901Z","volume":"4980.519","volume_value":"1288274.17"},
+"book":{"asks":[{"price":"254.252","qty":"0.013"},{"price":"254.407","qty":"0.134"},{"price":"254.408","qty":"0.471"},{"price":"254.666","qty":"0.750"},{"price":"254.668","qty":"0.357"},{"price":"254.691","qty":"28.295"},{"price":"255.111","qty":"2.565"},{"price":"255.112","qty":"2.147"},{"price":"255.289","qty":"1.567"},{"price":"255.373","qty":"2.336"},{"price":"255.498","qty":"6.436"},{"price":"255.811","qty":"4.691"},{"price":"255.930","qty":"4.322"},{"price":"256.080","qty":"5.979"},{"price":"256.278","qty":"0.114"}],"bids":[{"price":"254.200","qty":"0.013"},{"price":"254.055","qty":"0.485"},{"price":"254.054","qty":"0.472"},{"price":"253.962","qty":"28.295"},{"price":"253.918","qty":"1.567"},{"price":"253.758","qty":"1.191"},{"price":"253.601","qty":"2.336"},{"price":"253.569","qty":"2.203"},{"price":"253.256","qty":"1.579"},{"price":"253.218","qty":"2.147"},{"price":"253.170","qty":"4.346"},{"price":"253.001","qty":"2.857"},{"price":"253.000","qty":"0.936"},{"price":"252.863","qty":"2.299"},{"price":"252.588","qty":"4.346"}]},
+"trades":{"data":[{"price":"254.359","qty":"0.013","side":"sell","timestamp":"2026-10-06T11:47:40Z"},{"price":"254.579","qty":"0.013","side":"sell","timestamp":"2026-10-06T11:47:19Z"},{"price":"254.392","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:47:11Z"},{"price":"254.237","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:47:01Z"},{"price":"254.237","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:47:01Z"},{"price":"254.237","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:47:01Z"},{"price":"254.312","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:46:26Z"},{"price":"254.317","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:46:26Z"},{"price":"254.327","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:46:26Z"},{"price":"254.342","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:46:26Z"},{"price":"254.342","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:46:26Z"},{"price":"254.252","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:45:24Z"},{"price":"254.157","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:20Z"},{"price":"254.157","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:20Z"},{"price":"254.202","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:20Z"},{"price":"254.012","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:07Z"},{"price":"254.012","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:07Z"},{"price":"254.012","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:07Z"},{"price":"254.012","qty":"0.013","side":"buy","timestamp":"2026-10-06T11:44:07Z"},{"price":"253.960","qty":"0.013","side":"sell","timestamp":"2026-10-06T11:44:05Z"}]},
+"candles":{
+"1D":{"data":[{"close":"254.579","high":"269.194","low":"252.677","open":"262.813","timestamp":"2026-10-06T00:00:00Z","volume_usd":"548111.387369"},{"close":"262.764","high":"263.799","low":"245.191","open":"252.555","timestamp":"2026-10-05T00:00:00Z","volume_usd":"1652500.198296"},{"close":"252.510","high":"278.488","low":"241.444","open":"256.936","timestamp":"2026-10-04T00:00:00Z","volume_usd":"1024609.8270"},{"close":"256.926","high":"269.763","low":"243.193","open":"247.076","timestamp":"2026-10-03T00:00:00Z","volume_usd":"2358419.330472"},{"close":"246.993","high":"261.473","low":"223.990","open":"245.433","timestamp":"2026-10-02T00:00:00Z","volume_usd":"2298139.699689"},{"close":"245.176","high":"306.047","low":"240.000","open":"286.871","timestamp":"2026-10-01T00:00:00Z","volume_usd":"2757595.729688"},{"close":"286.999","high":"326.673","low":"262.828","open":"266.732","timestamp":"2026-09-30T00:00:00Z","volume_usd":"6988043.94133"},{"close":"266.526","high":"279.223","low":"205.000","open":"229.262","timestamp":"2026-09-29T00:00:00Z","volume_usd":"5107265.029152"},{"close":"230.634","high":"319.397","low":"195.629","open":"287.507","timestamp":"2026-09-28T00:00:00Z","volume_usd":"9988389.064332"},{"close":"286.711","high":"368.082","low":"148.934","open":"151.922","timestamp":"2026-09-27T00:00:00Z","volume_usd":"11532819.234784"},{"close":"150.957","high":"160.818","low":"97.947","open":"98.766","timestamp":"2026-09-26T00:00:00Z","volume_usd":"1702995.883767"},{"close":"98.708","high":"104.500","low":"88.410","open":"90.103","timestamp":"2026-09-25T00:00:00Z","volume_usd":"593417.68980"},{"close":"90.118","high":"91.225","low":"69.750","open":"70.669","timestamp":"2026-09-24T00:00:00Z","volume_usd":"437761.792818"},{"close":"70.695","high":"76.370","low":"70.503","open":"73.759","timestamp":"2026-09-23T00:00:00Z","volume_usd":"87595.982955"},{"close":"73.681","high":"75.000","low":"65.813","open":"66.850","timestamp":"2026-09-22T00:00:00Z","volume_usd":"190599.042334"},{"close":"66.843","high":"67.956","low":"64.156","open":"64.176","timestamp":"2026-09-21T00:00:00Z","volume_usd":"81360.764856"},{"close":"64.282","high":"65.997","low":"63.412","open":"65.687","timestamp":"2026-09-20T00:00:00Z","volume_usd":"39083.070308"},{"close":"65.701","high":"66.444","low":"63.099","open":"63.297","timestamp":"2026-09-19T00:00:00Z","volume_usd":"55013.943938"},{"close":"63.237","high":"64.287","low":"60.901","open":"61.151","timestamp":"2026-09-18T00:00:00Z","volume_usd":"70157.151384"},{"close":"61.104","high":"61.944","low":"60.333","open":"61.081","timestamp":"2026-09-17T00:00:00Z","volume_usd":"33709.182576"},{"close":"61.183","high":"61.272","low":"58.814","open":"61.173","timestamp":"2026-09-16T00:00:00Z","volume_usd":"44185.322489"},{"close":"61.152","high":"65.034","low":"60.597","open":"64.541","timestamp":"2026-09-15T00:00:00Z","volume_usd":"37905.189504"},{"close":"64.466","high":"64.759","low":"62.243","open":"63.086","timestamp":"2026-09-14T00:00:00Z","volume_usd":"40883.305744"},{"close":"63.009","high":"65.519","low":"62.855","open":"63.892","timestamp":"2026-09-13T00:00:00Z","volume_usd":"26127.563976"},{"close":"63.774","high":"64.729","low":"63.379","open":"63.379","timestamp":"2026-09-12T00:00:00Z","volume_usd":"31860.533790"},{"close":"63.346","high":"65.917","low":"62.815","open":"64.589","timestamp":"2026-09-11T00:00:00Z","volume_usd":"71748.276786"},{"close":"64.603","high":"67.801","low":"64.551","open":"67.227","timestamp":"2026-09-10T00:00:00Z","volume_usd":"41915.007827"},{"close":"67.180","high":"69.848","low":"66.268","open":"67.168","timestamp":"2026-09-09T00:00:00Z","volume_usd":"77294.284900"},{"close":"67.139","high":"68.833","low":"65.630","open":"66.580","timestamp":"2026-09-08T00:00:00Z","volume_usd":"32225.242942"},{"close":"66.641","high":"67.178","low":"65.051","open":"67.062","timestamp":"2026-09-07T00:00:00Z","volume_usd":"30315.190823"},{"close":"66.969","high":"67.170","low":"64.832","open":"64.912","timestamp":"2026-09-06T00:00:00Z","volume_usd":"27102.622176"},{"close":"64.917","high":"65.500","low":"63.457","open":"63.674","timestamp":"2026-09-05T00:00:00Z","volume_usd":"21009.153627"},{"close":"63.644","high":"67.396","low":"63.520","open":"65.348","timestamp":"2026-09-04T00:00:00Z","volume_usd":"52832.857364"},{"close":"65.341","high":"66.128","low":"64.190","open":"64.480","timestamp":"2026-09-03T00:00:00Z","volume_usd":"58068.285336"},{"close":"64.518","high":"66.414","low":"63.266","open":"63.645","timestamp":"2026-09-02T00:00:00Z","volume_usd":"56555.962656"},{"close":"63.726","high":"64.395","low":"60.951","open":"61.250","timestamp":"2026-09-01T00:00:00Z","volume_usd":"45357.044226"},{"close":"61.159","high":"62.536","low":"59.821","open":"60.018","timestamp":"2026-08-31T00:00:00Z","volume_usd":"23736.602967"},{"close":"59.767","high":"62.219","low":"59.767","open":"61.506","timestamp":"2026-08-30T00:00:00Z","volume_usd":"35369.393396"},{"close":"61.527","high":"61.966","low":"60.921","open":"61.105","timestamp":"2026-08-29T00:00:00Z","volume_usd":"31390.029441"},{"close":"61.095","high":"63.539","low":"60.425","open":"63.266","timestamp":"2026-08-28T00:00:00Z","volume_usd":"26826.509025"},{"close":"63.261","high":"63.855","low":"62.216","open":"63.171","timestamp":"2026-08-27T00:00:00Z","volume_usd":"41055.819651"},{"close":"63.145","high":"63.823","low":"60.774","open":"63.426","timestamp":"2026-08-26T00:00:00Z","volume_usd":"46749.779620"},{"close":"63.370","high":"66.379","low":"62.914","open":"64.324","timestamp":"2026-08-25T00:00:00Z","volume_usd":"40786.642990"},{"close":"64.353","high":"65.566","low":"63.582","open":"64.966","timestamp":"2026-08-24T00:00:00Z","volume_usd":"52184.812995"},{"close":"64.907","high":"65.675","low":"62.304","open":"63.246","timestamp":"2026-08-23T00:00:00Z","volume_usd":"43155.950323"},{"close":"63.372","high":"68.549","low":"62.164","open":"66.702","timestamp":"2026-08-22T00:00:00Z","volume_usd":"71014.346340"},{"close":"66.686","high":"66.844","low":"61.557","open":"62.313","timestamp":"2026-08-21T00:00:00Z","volume_usd":"65140.818694"},{"close":"62.301","high":"62.553","low":"58.662","open":"58.837","timestamp":"2026-08-20T00:00:00Z","volume_usd":"62535.376362"},{"close":"58.777","high":"59.248","low":"55.748","open":"55.891","timestamp":"2026-08-19T00:00:00Z","volume_usd":"52044.68242"},{"close":"55.895","high":"56.977","low":"55.470","open":"56.865","timestamp":"2026-08-18T00:00:00Z","volume_usd":"19031.353180"}]},
+"4h":{"data":[{"close":"254.359","high":"257.155","low":"252.677","open":"255.292","timestamp":"2026-10-06T08:00:00Z","volume_usd":"104333.992056"},{"close":"255.382","high":"263.234","low":"253.565","open":"263.014","timestamp":"2026-10-06T04:00:00Z","volume_usd":"118610.892990"},{"close":"263.254","high":"269.194","low":"258.747","open":"262.813","timestamp":"2026-10-06T00:00:00Z","volume_usd":"336542.597330"},{"close":"262.764","high":"263.127","low":"250.715","open":"252.025","timestamp":"2026-10-05T20:00:00Z","volume_usd":"267944.392260"},{"close":"251.990","high":"257.047","low":"250.830","open":"256.988","timestamp":"2026-10-05T16:00:00Z","volume_usd":"197946.460670"},{"close":"256.948","high":"263.799","low":"252.622","open":"254.169","timestamp":"2026-10-05T12:00:00Z","volume_usd":"256861.665472"},{"close":"254.179","high":"258.311","low":"250.270","open":"258.311","timestamp":"2026-10-05T08:00:00Z","volume_usd":"431408.866256"},{"close":"258.316","high":"258.371","low":"245.191","open":"250.217","timestamp":"2026-10-05T04:00:00Z","volume_usd":"356878.278012"},{"close":"250.237","high":"254.982","low":"248.796","open":"252.555","timestamp":"2026-10-05T00:00:00Z","volume_usd":"101391.277897"},{"close":"252.510","high":"259.257","low":"241.444","open":"258.428","timestamp":"2026-10-04T20:00:00Z","volume_usd":"353019.08040"},{"close":"258.432","high":"260.012","low":"255.205","open":"257.806","timestamp":"2026-10-04T16:00:00Z","volume_usd":"139133.586432"},{"close":"258.075","high":"260.861","low":"253.074","open":"257.354","timestamp":"2026-10-04T12:00:00Z","volume_usd":"166592.315925"},{"close":"257.397","high":"263.567","low":"257.000","open":"262.842","timestamp":"2026-10-04T08:00:00Z","volume_usd":"139453.833645"},{"close":"262.803","high":"271.217","low":"261.708","open":"269.728","timestamp":"2026-10-04T04:00:00Z","volume_usd":"92322.6939"},{"close":"269.894","high":"278.488","low":"254.972","open":"256.936","timestamp":"2026-10-04T00:00:00Z","volume_usd":"157261.83592"},{"close":"256.926","high":"269.612","low":"254.857","open":"255.094","timestamp":"2026-10-03T20:00:00Z","volume_usd":"255219.497508"},{"close":"255.294","high":"259.764","low":"248.213","open":"249.138","timestamp":"2026-10-03T16:00:00Z","volume_usd":"477662.73282"},{"close":"249.338","high":"258.008","low":"246.000","open":"257.458","timestamp":"2026-10-03T12:00:00Z","volume_usd":"230516.721070"},{"close":"257.628","high":"269.763","low":"254.116","open":"266.799","timestamp":"2026-10-03T08:00:00Z","volume_usd":"278894.933772"},{"close":"266.513","high":"267.474","low":"246.863","open":"252.647","timestamp":"2026-10-03T04:00:00Z","volume_usd":"741658.239686"},{"close":"252.395","high":"258.594","low":"243.193","open":"247.076","timestamp":"2026-10-03T00:00:00Z","volume_usd":"384927.109710"},{"close":"246.993","high":"247.113","low":"224.651","open":"231.889","timestamp":"2026-10-02T20:00:00Z","volume_usd":"488461.754562"},{"close":"231.774","high":"251.276","low":"226.474","open":"248.821","timestamp":"2026-10-02T16:00:00Z","volume_usd":"241934.508612"},{"close":"248.627","high":"251.791","low":"242.330","open":"246.206","timestamp":"2026-10-02T12:00:00Z","volume_usd":"260091.936851"},{"close":"246.246","high":"249.772","low":"227.695","open":"229.237","timestamp":"2026-10-02T08:00:00Z","volume_usd":"470109.962322"},{"close":"229.104","high":"258.045","low":"223.990","open":"249.327","timestamp":"2026-10-02T04:00:00Z","volume_usd":"545111.72928"},{"close":"248.864","high":"261.473","low":"242.304","open":"245.433","timestamp":"2026-10-02T00:00:00Z","volume_usd":"236037.798304"},{"close":"245.176","high":"258.976","low":"240.000","open":"255.387","timestamp":"2026-10-01T20:00:00Z","volume_usd":"302557.481392"},{"close":"254.815","high":"270.863","low":"250.542","open":"261.559","timestamp":"2026-10-01T16:00:00Z","volume_usd":"565397.536825"},{"close":"261.529","high":"280.621","low":"254.000","open":"276.249","timestamp":"2026-10-01T12:00:00Z","volume_usd":"829892.453257"},{"close":"276.504","high":"306.047","low":"267.401","open":"300.602","timestamp":"2026-10-01T08:00:00Z","volume_usd":"482378.924256"},{"close":"300.867","high":"301.789","low":"284.192","open":"296.289","timestamp":"2026-10-01T04:00:00Z","volume_usd":"385321.570368"},{"close":"296.061","high":"302.066","low":"286.493","open":"286.871","timestamp":"2026-10-01T00:00:00Z","volume_usd":"472506.250536"},{"close":"286.999","high":"294.958","low":"274.259","open":"294.958","timestamp":"2026-09-30T20:00:00Z","volume_usd":"748673.914371"},{"close":"296.189","high":"310.000","low":"288.780","open":"298.483","timestamp":"2026-09-30T16:00:00Z","volume_usd":"877428.220277"},{"close":"298.396","high":"320.656","low":"286.197","open":"316.473","timestamp":"2026-09-30T12:00:00Z","volume_usd":"1502158.28756"},{"close":"316.333","high":"326.673","low":"279.313","open":"285.667","timestamp":"2026-09-30T08:00:00Z","volume_usd":"1762924.125333"},{"close":"285.223","high":"298.817","low":"276.419","open":"296.414","timestamp":"2026-09-30T04:00:00Z","volume_usd":"682305.041363"},{"close":"296.118","high":"306.711","low":"262.828","open":"266.732","timestamp":"2026-09-30T00:00:00Z","volume_usd":"1711075.222008"},{"close":"266.526","high":"278.403","low":"253.056","open":"265.983","timestamp":"2026-09-29T20:00:00Z","volume_usd":"758905.066296"},{"close":"266.105","high":"275.561","low":"243.298","open":"249.965","timestamp":"2026-09-29T16:00:00Z","volume_usd":"956374.983480"},{"close":"249.565","high":"262.085","low":"237.888","open":"252.543","timestamp":"2026-09-29T12:00:00Z","volume_usd":"740556.435785"},{"close":"252.395","high":"279.223","low":"243.302","open":"264.095","timestamp":"2026-09-29T08:00:00Z","volume_usd":"806969.408960"},{"close":"263.000","high":"274.264","low":"236.000","open":"238.246","timestamp":"2026-09-29T04:00:00Z","volume_usd":"732496.817000"},{"close":"237.982","high":"239.127","low":"205.000","open":"229.262","timestamp":"2026-09-29T00:00:00Z","volume_usd":"897452.492308"},{"close":"230.634","high":"253.626","low":"223.587","open":"241.823","timestamp":"2026-09-28T20:00:00Z","volume_usd":"1232652.703518"},{"close":"241.941","high":"257.675","low":"220.307","open":"220.595","timestamp":"2026-09-28T16:00:00Z","volume_usd":"1583647.316013"},{"close":"220.482","high":"249.125","low":"218.154","open":"237.171","timestamp":"2026-09-28T12:00:00Z","volume_usd":"1458613.884258"},{"close":"236.145","high":"271.476","low":"195.629","open":"270.754","timestamp":"2026-09-28T08:00:00Z","volume_usd":"2483719.268940"},{"close":"269.826","high":"288.611","low":"249.871","open":"258.161","timestamp":"2026-09-28T04:00:00Z","volume_usd":"1533451.648338"}]},
+"1h":{"data":[{"close":"254.160","high":"254.907","low":"252.782","open":"253.693","timestamp":"2026-10-06T11:00:00Z","volume_usd":"13771.659600"},{"close":"253.910","high":"255.304","low":"253.288","open":"254.449","timestamp":"2026-10-06T10:00:00Z","volume_usd":"36957.616140"},{"close":"254.449","high":"257.155","low":"252.677","open":"255.147","timestamp":"2026-10-06T09:00:00Z","volume_usd":"30880.693987"},{"close":"255.137","high":"256.764","low":"254.646","open":"255.292","timestamp":"2026-10-06T08:00:00Z","volume_usd":"22731.431015"},{"close":"255.382","high":"258.489","low":"253.565","open":"257.956","timestamp":"2026-10-06T07:00:00Z","volume_usd":"38307.044618"},{"close":"257.901","high":"258.349","low":"255.040","open":"256.841","timestamp":"2026-10-06T06:00:00Z","volume_usd":"33972.009225"},{"close":"256.801","high":"260.259","low":"256.068","open":"259.969","timestamp":"2026-10-06T05:00:00Z","volume_usd":"16985.331742"},{"close":"259.994","high":"263.234","low":"259.701","open":"263.014","timestamp":"2026-10-06T04:00:00Z","volume_usd":"30309.840526"},{"close":"263.254","high":"269.194","low":"262.580","open":"268.278","timestamp":"2026-10-06T03:00:00Z","volume_usd":"102511.370854"},{"close":"268.192","high":"269.000","low":"262.463","open":"263.841","timestamp":"2026-10-06T02:00:00Z","volume_usd":"87328.410848"},{"close":"264.006","high":"266.723","low":"258.747","open":"264.749","timestamp":"2026-10-06T01:00:00Z","volume_usd":"67883.86278"},{"close":"264.846","high":"266.876","low":"259.471","open":"262.813","timestamp":"2026-10-06T00:00:00Z","volume_usd":"81107.763270"},{"close":"262.764","high":"263.127","low":"257.552","open":"259.715","timestamp":"2026-10-05T23:00:00Z","volume_usd":"94431.600792"},{"close":"259.775","high":"260.846","low":"255.217","open":"259.103","timestamp":"2026-10-05T22:00:00Z","volume_usd":"67590.077925"},{"close":"258.965","high":"260.904","low":"252.670","open":"253.430","timestamp":"2026-10-05T21:00:00Z","volume_usd":"69050.168635"},{"close":"253.530","high":"255.259","low":"250.715","open":"252.025","timestamp":"2026-10-05T20:00:00Z","volume_usd":"33849.043830"},{"close":"251.990","high":"254.050","low":"251.762","open":"252.140","timestamp":"2026-10-05T19:00:00Z","volume_usd":"23929.726370"},{"close":"252.028","high":"255.673","low":"250.830","open":"255.150","timestamp":"2026-10-05T18:00:00Z","volume_usd":"37496.72584"},{"close":"255.060","high":"256.000","low":"251.844","open":"253.974","timestamp":"2026-10-05T17:00:00Z","volume_usd":"38191.664160"},{"close":"254.075","high":"257.047","low":"252.652","open":"256.988","timestamp":"2026-10-05T16:00:00Z","volume_usd":"99611.120050"},{"close":"256.948","high":"257.792","low":"252.622","open":"254.047","timestamp":"2026-10-05T15:00:00Z","volume_usd":"64703.103672"},{"close":"254.007","high":"260.589","low":"253.554","open":"254.949","timestamp":"2026-10-05T14:00:00Z","volume_usd":"44740.538973"},{"close":"254.629","high":"260.815","low":"254.017","open":"259.338","timestamp":"2026-10-05T13:00:00Z","volume_usd":"96199.090829"},{"close":"259.368","high":"263.799","low":"253.042","open":"254.169","timestamp":"2026-10-05T12:00:00Z","volume_usd":"50294.04888"},{"close":"254.179","high":"254.589","low":"250.270","open":"252.802","timestamp":"2026-10-05T11:00:00Z","volume_usd":"72072.963808"},{"close":"252.835","high":"256.786","low":"252.565","open":"255.911","timestamp":"2026-10-05T10:00:00Z","volume_usd":"149933.177680"},{"close":"255.769","high":"258.301","low":"251.960","open":"252.015","timestamp":"2026-10-05T09:00:00Z","volume_usd":"98037.025007"},{"close":"252.055","high":"258.311","low":"251.765","open":"258.311","timestamp":"2026-10-05T08:00:00Z","volume_usd":"110249.109055"},{"close":"258.316","high":"258.371","low":"251.557","open":"251.914","timestamp":"2026-10-05T07:00:00Z","volume_usd":"140081.925324"},{"close":"252.159","high":"256.381","low":"249.630","open":"251.920","timestamp":"2026-10-05T06:00:00Z","volume_usd":"104273.041839"},{"close":"252.029","high":"257.630","low":"248.821","open":"248.941","timestamp":"2026-10-05T05:00:00Z","volume_usd":"74948.38402"},{"close":"248.801","high":"251.105","low":"245.191","open":"250.217","timestamp":"2026-10-05T04:00:00Z","volume_usd":"31937.837967"},{"close":"250.237","high":"253.807","low":"249.486","open":"250.593","timestamp":"2026-10-05T03:00:00Z","volume_usd":"25543.942723"},{"close":"250.700","high":"254.729","low":"249.883","open":"251.377","timestamp":"2026-10-05T02:00:00Z","volume_usd":"29514.91100"},{"close":"251.708","high":"254.982","low":"248.796","open":"252.627","timestamp":"2026-10-05T01:00:00Z","volume_usd":"19571.555540"},{"close":"252.742","high":"254.787","low":"249.120","open":"252.555","timestamp":"2026-10-05T00:00:00Z","volume_usd":"27196.050168"},{"close":"252.510","high":"255.670","low":"249.395","open":"250.800","timestamp":"2026-10-04T23:00:00Z","volume_usd":"33639.38220"},{"close":"250.601","high":"252.660","low":"249.442","open":"249.780","timestamp":"2026-10-04T22:00:00Z","volume_usd":"36686.983996"},{"close":"249.440","high":"253.467","low":"248.292","open":"250.845","timestamp":"2026-10-04T21:00:00Z","volume_usd":"118316.376320"},{"close":"250.845","high":"259.257","low":"241.444","open":"258.428","timestamp":"2026-10-04T20:00:00Z","volume_usd":"161561.73915"},{"close":"258.432","high":"259.039","low":"255.752","open":"256.204","timestamp":"2026-10-04T19:00:00Z","volume_usd":"48434.550144"},{"close":"256.229","high":"260.012","low":"255.560","open":"258.077","timestamp":"2026-10-04T18:00:00Z","volume_usd":"31221.247421"},{"close":"257.828","high":"259.773","low":"255.352","open":"255.722","timestamp":"2026-10-04T17:00:00Z","volume_usd":"19780.56416"},{"close":"255.607","high":"258.235","low":"255.205","open":"257.806","timestamp":"2026-10-04T16:00:00Z","volume_usd":"38951.95073"},{"close":"258.075","high":"260.861","low":"254.349","open":"259.555","timestamp":"2026-10-04T15:00:00Z","volume_usd":"79422.065100"},{"close":"259.465","high":"260.737","low":"255.217","open":"257.135","timestamp":"2026-10-04T14:00:00Z","volume_usd":"29999.083835"},{"close":"257.169","high":"257.564","low":"253.074","open":"254.862","timestamp":"2026-10-04T13:00:00Z","volume_usd":"24940.763958"},{"close":"254.452","high":"259.141","low":"253.292","open":"257.354","timestamp":"2026-10-04T12:00:00Z","volume_usd":"31849.75684"},{"close":"257.397","high":"260.779","low":"257.014","open":"258.411","timestamp":"2026-10-04T11:00:00Z","volume_usd":"45023.368446"},{"close":"258.406","high":"260.287","low":"257.000","open":"259.955","timestamp":"2026-10-04T10:00:00Z","volume_usd":"35181.201682"}]},
+"7D":{"data":[{"close":"254.160","high":"269.194","low":"245.191","open":"252.555","timestamp":"2026-10-05T00:00:00Z","volume_usd":"2145606.266160"},{"close":"252.510","high":"326.673","low":"195.629","open":"287.507","timestamp":"2026-09-28T00:00:00Z","volume_usd":"30454821.528780"},{"close":"286.711","high":"368.082","low":"64.156","open":"64.176","timestamp":"2026-09-21T00:00:00Z","volume_usd":"19329611.504661"},{"close":"64.282","high":"66.444","low":"58.814","open":"63.086","timestamp":"2026-09-14T00:00:00Z","volume_usd":"326723.035864"},{"close":"63.009","high":"69.848","low":"62.815","open":"67.062","timestamp":"2026-09-07T00:00:00Z","volume_usd":"301254.535215"},{"close":"66.969","high":"67.396","low":"59.821","open":"60.018","timestamp":"2026-08-31T00:00:00Z","volume_usd":"296245.273842"},{"close":"59.767","high":"66.379","low":"59.767","open":"64.966","timestamp":"2026-08-24T00:00:00Z","volume_usd":"262075.605485"},{"close":"64.907","high":"68.549","low":"55.352","open":"56.846","timestamp":"2026-08-17T00:00:00Z","volume_usd":"381359.13129"},{"close":"56.875","high":"59.661","low":"56.367","open":"58.221","timestamp":"2026-08-10T00:00:00Z","volume_usd":"287126.100625"},{"close":"58.232","high":"61.335","low":"57.767","open":"60.405","timestamp":"2026-08-03T00:00:00Z","volume_usd":"247834.169128"},{"close":"60.522","high":"63.883","low":"59.643","open":"63.667","timestamp":"2026-07-27T00:00:00Z","volume_usd":"419394.522162"},{"close":"63.720","high":"65.268","low":"62.531","open":"64.151","timestamp":"2026-07-20T00:00:00Z","volume_usd":"211979.108160"},{"close":"64.212","high":"67.777","low":"63.325","open":"65.238","timestamp":"2026-07-13T00:00:00Z","volume_usd":"327083.470872"},{"close":"65.462","high":"69.151","low":"63.885","open":"67.688","timestamp":"2026-07-06T00:00:00Z","volume_usd":"281831.257430"},{"close":"67.547","high":"69.112","low":"63.874","open":"64.559","timestamp":"2026-06-29T00:00:00Z","volume_usd":"278381.856382"}]}
+}}
+</script>
+
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const SNAP = JSON.parse($('#snap').textContent);
+const SERVER = 'Crypto.com';
+const INST = 'QNT_USD';
+const CIRC = 14544000, MAXS = 14612493, ATH = 427.42;
+const TCH_T = Date.parse('2026-09-24T00:00:00Z');
+const PRE_TCH_CLOSE = 70.695; // 23 Sep 2026 daily close, Crypto.com
+
+const S = {
+  ticker: SNAP.ticker, book: SNAP.book, trades: SNAP.trades,
+  candles: Object.assign({}, SNAP.candles),
+  live: {}, at: {}, err: {}, tf: '1D', mcp: undefined, lastPrice: null, hover: null
+};
+try { const saved = localStorage.getItem('qnt-tf'); if (saved && SNAP.candles[saved]) S.tf = saved; } catch(e) {}
+
+/* ---------- formatting ---------- */
+const n2 = (v, d=2) => Number(v).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+const usd = (v, d=2) => '$' + n2(v, d);
+const big = v => v >= 1e9 ? '$' + (v/1e9).toFixed(2) + 'B' : v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : v >= 1e3 ? '$' + (v/1e3).toFixed(1) + 'K' : usd(v);
+const pct = (v, d=1) => !isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + n2(Math.abs(v), d) + '%';
+const dirCls = v => v > 0.0001 ? 'up' : v < -0.0001 ? 'down' : 'flat';
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const hhmm = d => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+const hhmmss = d => hhmm(d) + ':' + String(d.getSeconds()).padStart(2,'0');
+const dayLbl = t => { const d = new Date(t); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; };
+const tLabel = (t, tf) => { const d = new Date(t); return (tf === '1D' || tf === '7D') ? dayLbl(t) : d.getDate() + ' ' + MON[d.getMonth()] + ' ' + hhmm(d); };
+const snapTime = 'snapshot ' + dayLbl(Date.parse(SNAP.asOf)) + ' ' + new Date(SNAP.asOf).toISOString().slice(11,16) + ' UTC';
+
+function norm(p){
+  return ((p && p.data) || []).map(k => ({ t: Date.parse(k.timestamp), o: +k.open, h: +k.high, l: +k.low, c: +k.close, v: +(k.volume_usd || 0) }))
+    .filter(k => isFinite(k.c) && isFinite(k.t)).sort((a,b) => a.t - b.t);
+}
+function metaFor(key){
+  if (S.live[key]) {
+    const stale = S.err[key];
+    return { cls: stale ? 'meta stale' : 'meta live', txt: (stale ? 'last update ' : 'live · ') + hhmmss(new Date(S.at[key])) };
+  }
+  return { cls: 'meta', txt: snapTime };
+}
+function setMeta(id, key){ const m = metaFor(key), el = $(id); el.className = m.cls; el.textContent = m.txt; }
+
+/* ---------- ticker & price-linked values ---------- */
+function renderTicker(){
+  const t = S.ticker, last = +t.last, ch = +t.change * 100, hi = +t.high, lo = +t.low, bid = +t.best_bid, ask = +t.best_ask;
+  const priceEl = $('#price');
+  priceEl.textContent = usd(last);
+  if (S.lastPrice != null && last !== S.lastPrice && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const c = last > S.lastPrice ? 'flash-up' : 'flash-down';
+    priceEl.classList.add(c); setTimeout(() => priceEl.classList.remove(c), 120);
+  }
+  S.lastPrice = last;
+  const chip = $('#chg');
+  chip.className = 'chip ' + dirCls(ch);
+  chip.textContent = (ch > 0 ? '▲ ' : ch < 0 ? '▼ ' : '') + pct(ch, 2) + ' 24h';
+  $('#bid').textContent = usd(bid, 3);
+  $('#ask').textContent = usd(ask, 3);
+  const spr = ask - bid, bps = spr / ((ask + bid) / 2) * 1e4;
+  $('#spr').innerHTML = usd(spr, 3) + ' <small>' + n2(bps, 1) + ' bps</small>';
+  $('#vol24').innerHTML = big(+t.volume_value) + ' <small>Crypto.com</small>';
+  $('#lo').textContent = 'L ' + usd(lo); $('#hi').textContent = 'H ' + usd(hi);
+  $('#rangeDot').style.left = (hi > lo ? clamp((last - lo) / (hi - lo), 0, 1) * 100 : 50) + '%';
+  $('#p24').textContent = pct(ch, 2); $('#p24').className = dirCls(ch);
+  $('#mcap').textContent = big(last * CIRC);
+  $('#fdv').textContent = big(last * MAXS);
+  $('#athBar').style.width = clamp(last / ATH * 100, 0, 100) + '%';
+  $('#athSub').textContent = '11 Sep 2021 · price is ' + pct((last / ATH - 1) * 100) + ' from the peak';
+}
+
+/* ---------- performance ---------- */
+function renderPerf(){
+  const d = norm(S.candles['1D']), w = norm(S.candles['7D']);
+  const last = +S.ticker.last || (d.length ? d[d.length-1].c : NaN);
+  const back = (arr, k) => arr.length > k ? arr[arr.length - 1 - k].c : NaN;
+  const set = (id, v) => { const el = $(id); el.textContent = pct(v); el.className = dirCls(v); };
+  set('#p7', (last / back(d, 7) - 1) * 100);
+  set('#p30', (last / back(d, 30) - 1) * 100);
+  set('#p90', (last / back(w, 13) - 1) * 100);
+  const pre = d.find(k => k.t === Date.parse('2026-09-23T00:00:00Z'));
+  set('#pTch', (last / (pre ? pre.c : PRE_TCH_CLOSE) - 1) * 100);
+  // rally high: highest high in the daily set
+  if (d.length) {
+    let hk = d[0]; d.forEach(k => { if (k.h > hk.h) hk = k; });
+    $('#rallyHi').textContent = usd(hk.h);
+    $('#rallySub').textContent = dayLbl(hk.t) + ' on Crypto.com · now ' + pct((last / hk.h - 1) * 100) + ' below';
+  }
+}
+
+/* ---------- technicals ---------- */
+function rsi(cl, p){
+  if (cl.length <= p) return NaN;
+  let g = 0, l = 0;
+  for (let i = 1; i <= p; i++) { const x = cl[i] - cl[i-1]; if (x > 0) g += x; else l -= x; }
+  g /= p; l /= p;
+  for (let i = p + 1; i < cl.length; i++) { const x = cl[i] - cl[i-1]; g = (g*(p-1) + Math.max(x,0)) / p; l = (l*(p-1) + Math.max(-x,0)) / p; }
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+const sma = (cl, p) => cl.length >= p ? cl.slice(-p).reduce((a,b) => a + b, 0) / p : NaN;
+function renderTech(){
+  const d = norm(S.candles['1D']);
+  const cl = d.map(k => k.c);
+  if (S.ticker && d.length) cl[cl.length-1] = +S.ticker.last;
+  const last = cl[cl.length-1];
+  const r = rsi(cl, 14), s7 = sma(cl, 7), s20 = sma(cl, 20);
+  const rets = []; for (let i = Math.max(1, cl.length - 30); i < cl.length; i++) rets.push(Math.log(cl[i] / cl[i-1]));
+  const mean = rets.reduce((a,b) => a+b, 0) / rets.length;
+  const vol = Math.sqrt(rets.reduce((a,b) => a + (b-mean)**2, 0) / (rets.length - 1)) * Math.sqrt(365) * 100;
+  const rTag = r >= 70 ? ['warn','Overbought'] : r <= 30 ? ['good','Oversold'] : ['neutral','Neutral'];
+  const d20 = (last / s20 - 1) * 100, d7 = (last / s7 - 1) * 100;
+  const tTag = last >= s20 ? ['good','Above'] : ['bad','Below'];
+  const sTag = last >= s7 ? ['good','Above'] : ['bad','Below'];
+  const vTag = vol > 150 ? ['warn','Extreme'] : vol > 80 ? ['warn','High'] : ['neutral','Normal'];
+  $('#tech').innerHTML =
+    '<div class="tk"><div class="top-row"><span class="name">RSI (14)</span><span><span class="val">' + n2(r,1) + '</span> <span class="tag ' + rTag[0] + '">' + rTag[1] + '</span></span></div>' +
+      '<div class="rsi" aria-hidden="true"><i style="left:' + clamp(r,0,100) + '%"></i></div><div class="rsiscale"><span>0</span><span>30</span><span>70</span><span>100</span></div></div>' +
+    '<div class="tk"><div class="top-row"><span class="name">20-day average</span><span><span class="val">' + usd(s20) + '</span> <span class="tag ' + tTag[0] + '">' + tTag[1] + '</span></span></div>' +
+      '<small>Price is ' + pct(d20) + ' versus the 20-day average, which still includes pre-rally days near $65.</small></div>' +
+    '<div class="tk"><div class="top-row"><span class="name">7-day average</span><span><span class="val">' + usd(s7) + '</span> <span class="tag ' + sTag[0] + '">' + sTag[1] + '</span></span></div>' +
+      '<small>Price is ' + pct(d7) + ' versus the last week. This is the short-term trend line.</small></div>' +
+    '<div class="tk"><div class="top-row"><span class="name">30-day volatility</span><span><span class="val">' + n2(vol,0) + '%</span> <span class="tag ' + vTag[0] + '">' + vTag[1] + '</span></span></div>' +
+      '<small>Annualized, from daily log returns. Bitcoin usually runs 40–60%.</small></div>' +
+    '<p class="note">On 1 Oct Cryptonomist read daily RSI at 81 with price at $294 and flagged a blow-off risk. Between 2 and 6 Oct it traded in a $224–$278 range.</p>';
+}
+
+/* ---------- order book ---------- */
+function renderBook(){
+  const b = S.book || {};
+  const asks = (b.asks || []).map(r => ({p:+r.price, q:+r.qty})).filter(r => isFinite(r.p)).sort((x,y) => x.p - y.p).slice(0, 10);
+  const bids = (b.bids || []).map(r => ({p:+r.price, q:+r.qty})).filter(r => isFinite(r.p)).sort((x,y) => y.p - x.p).slice(0, 10);
+  let ca = 0; asks.forEach(r => { ca += r.q; r.cum = ca; });
+  let cb = 0; bids.forEach(r => { cb += r.q; r.cum = cb; });
+  const mx = Math.max(ca, cb) || 1;
+  const row = (r, cls) => '<div class="br ' + cls + '" style="--w:' + (r.cum / mx * 100).toFixed(1) + '%"><span>' + n2(r.p,3) + '</span><span>' + n2(r.q,3) + '</span><span>' + n2(r.cum,3) + '</span></div>';
+  let h = '<div class="bh"><span>Price</span><span>Size QNT</span><span>Total</span></div>';
+  h += asks.slice().reverse().map(r => row(r, 'ask')).join('');
+  if (asks.length && bids.length) {
+    const spr = asks[0].p - bids[0].p, mid = (asks[0].p + bids[0].p) / 2;
+    h += '<div class="spread"><span>Mid ' + usd(mid,3) + '</span><span>Spread ' + usd(spr,3) + ' · ' + n2(spr/mid*1e4,1) + ' bps</span></div>';
+  }
+  h += bids.map(r => row(r, 'bid')).join('');
+  $('#book').innerHTML = h;
+  const tot = ca + cb, bp = tot ? cb / tot * 100 : 50;
+  $('#imb').innerHTML = '<div class="lbl"><span>Bids ' + n2(bp,0) + '% · ' + n2(cb,1) + ' QNT</span><span>Asks ' + n2(100-bp,0) + '% · ' + n2(ca,1) + ' QNT</span></div>' +
+    '<div class="bar" aria-hidden="true"><i class="b" style="width:' + bp + '%"></i><i class="a" style="width:' + (100-bp) + '%"></i></div>';
+  setMeta('#bookMeta', 'book');
+}
+
+/* ---------- trades ---------- */
+function renderTape(){
+  const tr = ((S.trades && S.trades.data) || []).map(x => ({t:Date.parse(x.timestamp), p:+x.price, q:+x.qty, s: x.side === 'sell' ? 'sell' : 'buy'}))
+    .filter(x => isFinite(x.p)).sort((a,b) => b.t - a.t);
+  const buys = tr.filter(x => x.s === 'buy'), bq = buys.reduce((a,x) => a + x.q, 0), aq = tr.reduce((a,x) => a + x.q, 0);
+  $('#tapeSum').textContent = tr.length ? (buys.length + ' of ' + tr.length + ' trades were buys (' + n2(aq ? bq/aq*100 : 0, 0) + '% of size). Largest: ' + n2(Math.max.apply(null, tr.map(x => x.q)), 3) + ' QNT.') : 'No recent trades.';
+  $('#tape').innerHTML = tr.map(x => '<li><span class="t">' + hhmmss(new Date(x.t)) + '</span><span class="side ' + x.s + '"><i></i>' + (x.s === 'buy' ? 'Buy' : 'Sell') + '</span><span class="p">' + n2(x.p,3) + '</span><span class="q">' + n2(x.q,3) + '</span></li>').join('');
+  setMeta('#tapeMeta', 'trades');
+}
+
+/* ---------- chart ---------- */
+function niceTicks(min, max, count){
+  const span = max - min, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), nr = raw / mag;
+  const step = (nr < 1.5 ? 1 : nr < 3 ? 2 : nr < 7 ? 5 : 10) * mag;
+  const out = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(+v.toFixed(8));
+  return out;
+}
+const axisFmt = v => v >= 100 ? '$' + n2(v, 0) : '$' + n2(v, 2);
+function drawChart(){
+  const box = $('#chart');
+  const data = norm(S.candles[S.tf]); const n = data.length;
+  if (!n) { box.innerHTML = '<p class="meta">No candles for this interval.</p>'; return; }
+  const W = Math.max(280, Math.floor(box.clientWidth)), H = W < 560 ? 230 : 300, VH = 64, XL = 20;
+  const pl = 4, pr = 62, pt = 12, pb = 8, iw = W - pl - pr, step = iw / n;
+  const X = i => pl + step * (i + 0.5);
+  let lo = Infinity, hi = -Infinity; data.forEach(k => { lo = Math.min(lo, k.l); hi = Math.max(hi, k.h); });
+  const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
+  const Y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
+  const bw = Math.max(1, Math.min(14, step * 0.62));
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="QNT candlestick chart, ' + S.tf + ' interval">';
+  niceTicks(lo, hi, H < 260 ? 4 : 5).forEach(v => {
+    const y = Y(v).toFixed(1);
+    s += '<line class="grid" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y + '" y2="' + y + '"/><text class="ax" x="' + (W - pr + 8) + '" y="' + (+y + 4) + '">' + axisFmt(v) + '</text>';
+  });
+  // TCH announcement marker
+  if (data[0].t <= TCH_T && data[n-1].t >= TCH_T - 7*864e5) {
+    let idx = 0; for (let i = 0; i < n; i++) if (data[i].t <= TCH_T) idx = i;
+    const x = X(idx).toFixed(1);
+    s += '<line class="evline" x1="' + x + '" x2="' + x + '" y1="' + pt + '" y2="' + (H - pb) + '"/>';
+    const anchorEnd = X(idx) > W * 0.55;
+    s += '<text class="evtxt" x="' + (anchorEnd ? +x - 5 : +x + 5) + '" y="' + (pt + 10) + '" text-anchor="' + (anchorEnd ? 'end' : 'start') + '">TCH deal · 24 Sep</text>';
+  }
+  data.forEach((k, i) => {
+    const c = k.c >= k.o ? 'up' : 'dn', x = X(i);
+    s += '<line class="wick ' + c + '" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + Y(k.h).toFixed(1) + '" y2="' + Y(k.l).toFixed(1) + '"/>';
+    const y1 = Y(Math.max(k.o, k.c)), hh = Math.max(1, Math.abs(Y(k.o) - Y(k.c)));
+    s += '<rect class="body ' + c + '" x="' + (x - bw/2).toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" rx="1"/>';
+  });
+  const lp = data[n-1].c, ly = Y(lp);
+  s += '<line class="lastline" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + ly.toFixed(1) + '" y2="' + ly.toFixed(1) + '"/>';
+  s += '<rect class="lasttag" x="' + (W - pr + 2) + '" y="' + (ly - 9).toFixed(1) + '" width="' + (pr - 2) + '" height="18" rx="3"/><text class="lasttxt" x="' + (W - pr + 7) + '" y="' + (ly + 4).toFixed(1) + '">' + axisFmt(lp) + '</text>';
+  s += '<line class="xh" id="xh1" x1="0" x2="0" y1="' + pt + '" y2="' + (H - pb) + '"/></svg>';
+  // volume strip (own axis, separate chart)
+  const mv = Math.max.apply(null, data.map(k => k.v)) || 1;
+  let v = '<svg viewBox="0 0 ' + W + ' ' + (VH + XL) + '" width="' + W + '" height="' + (VH + XL) + '" role="img" aria-label="Volume in US dollars">';
+  v += '<line class="grid" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + VH + '" y2="' + VH + '"/>';
+  v += '<text class="ax" x="' + (W - pr + 8) + '" y="12">' + big(mv) + '</text><text class="ax" x="' + (W - pr + 8) + '" y="' + (VH - 2) + '">Vol</text>';
+  data.forEach((k, i) => {
+    const h = Math.max(1, k.v / mv * (VH - 6));
+    v += '<rect class="vbar ' + (k.c >= k.o ? 'up' : 'dn') + '" x="' + (X(i) - bw/2).toFixed(1) + '" y="' + (VH - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1"/>';
+  });
+  const nt = W < 480 ? 3 : 5;
+  for (let j = 0; j < nt; j++) {
+    const i = Math.round(j * (n - 1) / (nt - 1));
+    const anchor = j === 0 ? 'start' : j === nt - 1 ? 'end' : 'middle';
+    const x = j === 0 ? pl : j === nt - 1 ? W - pr : X(i);
+    v += '<text class="ax" x="' + x.toFixed(1) + '" y="' + (VH + 15) + '" text-anchor="' + anchor + '">' + tLabel(data[i].t, S.tf) + '</text>';
+  }
+  v += '<line class="xh" id="xh2" x1="0" x2="0" y1="0" y2="' + VH + '"/></svg>';
+  box.innerHTML = s + v;
+  S.chart = { data, X, step, pl, W, n };
+  const first = data[0].c, chg = (lp / first - 1) * 100;
+  $('#chartMeta').textContent = n + ' candles · ' + tLabel(data[0].t, S.tf) + ' to ' + tLabel(data[n-1].t, S.tf) + ' · ' + pct(chg) + ' · ' + metaFor('c:' + S.tf).txt;
+  $('#chartMeta').className = metaFor('c:' + S.tf).cls;
+  if (S.hover != null) showTip(Math.min(S.hover, n - 1));
+  renderTable(data);
+}
+function renderTable(data){
+  const dfmt = t => S.tf === '1D' || S.tf === '7D' ? dayLbl(t) + ' ' + new Date(t).getUTCFullYear() : tLabel(t, S.tf);
+  $('#tbl').innerHTML = '<table><thead><tr><th>Time</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>' +
+    data.slice().reverse().map(k => '<tr><td>' + dfmt(k.t) + '</td><td>' + n2(k.o,3) + '</td><td>' + n2(k.h,3) + '</td><td>' + n2(k.l,3) + '</td><td>' + n2(k.c,3) + '</td><td>' + big(k.v) + '</td></tr>').join('') + '</tbody></table>';
+}
+function showTip(i){
+  const c = S.chart; if (!c) return;
+  const k = c.data[i]; S.hover = i;
+  const x = c.X(i);
+  ['#xh1','#xh2'].forEach(id => { const el = $(id); if (el) { el.setAttribute('x1', x); el.setAttribute('x2', x); el.classList.add('on'); } });
+  const tip = $('#tip'), ch = (k.c / k.o - 1) * 100;
+  tip.innerHTML = '<b>' + tLabel(k.t, S.tf) + (S.tf === '7D' ? ' week' : '') + '</b>' +
+    '<div class="r"><span>Open</span><span>' + usd(k.o) + '</span></div><div class="r"><span>High</span><span>' + usd(k.h) + '</span></div>' +
+    '<div class="r"><span>Low</span><span>' + usd(k.l) + '</span></div><div class="r"><span>Close</span><span>' + usd(k.c) + '</span></div>' +
+    '<div class="r"><span>Change</span><span>' + pct(ch, 2) + '</span></div><div class="r"><span>Volume</span><span>' + big(k.v) + '</span></div>';
+  tip.hidden = false;
+  const tw = tip.offsetWidth, wrapW = $('#chartWrap').clientWidth;
+  tip.style.left = (x + 14 + tw > wrapW ? Math.max(0, x - 14 - tw) : x + 14) + 'px';
+}
+function hideTip(){ S.hover = null; $('#tip').hidden = true; ['#xh1','#xh2'].forEach(id => { const el = $(id); if (el) el.classList.remove('on'); }); }
+const wrap = $('#chartWrap');
+wrap.addEventListener('pointermove', e => {
+  const c = S.chart; if (!c) return;
+  const r = $('#chart').getBoundingClientRect(), x = (e.clientX - r.left) * (c.W / r.width);
+  showTip(clamp(Math.floor((x - c.pl) / c.step), 0, c.n - 1));
+});
+wrap.addEventListener('pointerleave', hideTip);
+wrap.addEventListener('blur', hideTip);
+wrap.addEventListener('keydown', e => {
+  const c = S.chart; if (!c) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    const cur = S.hover == null ? c.n - 1 : S.hover + (e.key === 'ArrowLeft' ? -1 : 1);
+    showTip(clamp(cur, 0, c.n - 1));
+  } else if (e.key === 'Escape') hideTip();
+});
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  S.tf = b.dataset.tf; S.hover = null; hideTip();
+  try { localStorage.setItem('qnt-tf', S.tf); } catch(e) {}
+  document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  drawChart();
+}));
+document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tf === S.tf)));
+let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(drawChart, 80); }).observe($('#chart'));
+
+/* ---------- status ---------- */
+const AUTHZ = new Set(['needs_reauth','server_not_connected','server_not_found','selection_required','not_in_manifest','blocked_by_policy','approval_required','consent_required']);
+const DEAD = new Set(['not_granted','capability_disabled','capability_removed','bad_request','transform_error','user_changed']);
+function msgFor(code){
+  switch (code) {
+    case 'needs_reauth': return 'Reconnect Crypto.com in claude.ai Settings → Connectors to resume live prices.';
+    case 'server_not_connected': case 'server_not_found': return 'Add the Crypto.com connector in claude.ai Settings → Connectors to see live prices.';
+    case 'selection_required': return 'Pick which Crypto.com connector to use when prompted, then reload the page.';
+    case 'not_in_manifest': case 'consent_required': return 'Live prices are off for this page. Allow Crypto.com in the page’s Permissions menu to turn them on.';
+    case 'blocked_by_policy': case 'approval_required': return 'Your organization blocks Crypto.com tools here, so the page shows saved prices.';
+    case 'server_unavailable': case 'rate_limited': return 'Crypto.com is not answering right now. Showing the last prices received.';
+    case 'not_granted': case 'capability_disabled': case 'capability_removed': return 'Live data is not available in this view. Showing saved prices.';
+    default: return 'A live update failed. Showing the last prices received.';
+  }
+}
+function renderStatus(){
+  const keys = Object.keys(S.live).filter(k => S.live[k]);
+  const errs = Object.values(S.err).filter(Boolean);
+  const pill = $('#pill'), txt = $('#pillTxt'), note = $('#statusNote');
+  if (keys.length) {
+    const newest = Math.max.apply(null, keys.map(k => S.at[k] || 0));
+    pill.className = 'pill ' + (errs.length ? 'warn' : 'live');
+    txt.textContent = 'Live · Crypto.com · ' + hhmmss(new Date(newest));
+    note.textContent = errs.length ? msgFor(errs[0]) : 'Prices refresh about every 30 seconds while this page is open.';
+  } else {
+    pill.className = 'pill' + (errs.length ? ' warn' : '');
+    txt.textContent = 'Snapshot · 6 Oct 2026, 11:47 UTC';
+    note.textContent = errs.length ? msgFor(errs[0]) : S.mcp === null ? 'Open this page in claude.ai with the Crypto.com connector for live prices.' : S.mcp === undefined ? 'Connecting to Crypto.com for live prices…' : 'Waiting for the first live prices…';
+  }
+}
+
+function renderAll(){
+  renderTicker(); renderPerf(); renderTech(); renderBook(); renderTape(); drawChart(); renderStatus();
+}
+
+/* ---------- live wiring ---------- */
+const SNAPKEY = { ticker: () => { S.ticker = SNAP.ticker; }, book: () => { S.book = SNAP.book; }, trades: () => { S.trades = SNAP.trades; } };
+function watch(mcp, key, tool, input, every, apply){
+  mcp.watchTool(SERVER, tool, input, ev => {
+    if (ev.type === 'data') {
+      const p = ev.result && ev.result.payload;
+      if (!p || typeof p !== 'object' || !apply(p)) return;
+      S.live[key] = true; S.err[key] = null;
+      S.at[key] = (ev.result.cache && ev.result.cache.storedAt) || Date.now();
+    } else {
+      const code = (ev.error && ev.error.code) || 'upstream_error';
+      S.err[key] = code;
+      if (AUTHZ.has(code) || DEAD.has(code)) {
+        S.live[key] = false;
+        if (key.startsWith('c:')) S.candles[key.slice(2)] = SNAP.candles[key.slice(2)];
+        else SNAPKEY[key] && SNAPKEY[key]();
+      }
+    }
+    renderAll();
+  }, { refetchInterval: every, cache: { staleTime: Math.min(every, 30000) } });
+}
+renderAll();
+Promise.resolve(window.claude && window.claude.use ? window.claude.use('mcp') : null).then(mcp => {
+  S.mcp = mcp || null;
+  renderStatus();
+  if (!mcp) return;
+  watch(mcp, 'ticker', 'get_ticker', { instrument_name: INST }, 30000, p => { if (p.last == null) return false; S.ticker = p; return true; });
+  watch(mcp, 'book', 'get_book', { instrument_name: INST, depth: 15 }, 30000, p => { if (!Array.isArray(p.bids)) return false; S.book = p; return true; });
+  watch(mcp, 'trades', 'get_trades', { instrument_name: INST, count: 20 }, 30000, p => { if (!Array.isArray(p.data)) return false; S.trades = p; return true; });
+  [['1h', 60000], ['4h', 120000], ['1D', 120000], ['7D', 600000]].forEach(([tf, every]) =>
+    watch(mcp, 'c:' + tf, 'get_candlestick', { instrument_name: INST, timeframe: tf }, every, p => { if (!Array.isArray(p.data) || !p.data.length) return false; S.candles[tf] = p; return true; }));
+}).catch(() => { S.mcp = null; renderStatus(); });
+})();
+</script>
