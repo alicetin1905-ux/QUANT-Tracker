@@ -173,18 +173,36 @@ def main():
         alerts.append((f"QNT crossed {side_now} its 20-day average",
                        f"Price moved {side_now} the 20-day average (${sma:,.2f})"))
 
-    # G. your own price levels
+    # G. your own price levels. GitHub's scheduler can leave hours between runs, so this
+    # uses the low/high reached since the last run: a dip that recovers in between still counts.
+    # Each level fires once, then re-arms after price moves 2% back past it.
     targets = json.loads(TARGETS_FILE.read_text()) if TARGETS_FILE.exists() else {}
-    new["last_usd"], new["last_eur"] = price, eur
-    for cur, now_p, prev_p, sym in (("usd", price, state.get("last_usd"), "$"), ("eur", eur, state.get("last_eur"), "€")):
-        if now_p is None or prev_p is None:
+    new["last_usd"], new["last_eur"], new["last_run_at"] = price, eur, now
+    since = state.get("last_run_at")
+    window = [k for k in h1 if since and k["t"] >= (since // 3600) * 3600 * 1000]
+    usd_lo = min([price] + [k["l"] for k in window])
+    usd_hi = max([price] + [k["h"] for k in window])
+    armed, new_armed = state.get("armed", {}), {}
+    for cur, now_p, lo, hi, sym in (("usd", price, usd_lo, usd_hi, "$"), ("eur", eur, eur, eur, "€")):
+        if now_p is None:
             continue
-        for lvl in targets.get(f"above_{cur}", []):
-            if prev_p < lvl <= now_p:
-                alerts.append((f"QNT above {sym}{lvl:,}", f"Your level: price rose above {sym}{lvl:,}"))
-        for lvl in targets.get(f"below_{cur}", []):
-            if prev_p > lvl >= now_p:
-                alerts.append((f"QNT below {sym}{lvl:,}", f"Your level: price fell below {sym}{lvl:,}"))
+        for kind in ("above", "below"):
+            for lvl in targets.get(f"{kind}_{cur}", []):
+                key = f"{kind}_{cur}_{lvl}"
+                if key not in armed:  # level seen for the first time: arm it, don't fire
+                    new_armed[key] = now_p < lvl if kind == "above" else now_p > lvl
+                    continue
+                hit = hi >= lvl if kind == "above" else lo <= lvl
+                if armed[key] and hit:
+                    if kind == "above":
+                        alerts.append((f"QNT above {sym}{lvl:,}", f"Your level: QNT rose to {sym}{hi:,.2f}, above your {sym}{lvl:,} level"))
+                    else:
+                        alerts.append((f"QNT below {sym}{lvl:,}", f"Your level: QNT dipped to {sym}{lo:,.2f}, below your {sym}{lvl:,} level"))
+                    new_armed[key] = False
+                else:
+                    back = now_p < lvl * 0.98 if kind == "above" else now_p > lvl * 1.02
+                    new_armed[key] = armed[key] or back
+    new["armed"] = new_armed
 
     STATE_FILE.write_text(json.dumps(new, indent=1))
 
